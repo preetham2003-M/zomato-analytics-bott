@@ -2,68 +2,66 @@ import streamlit as st
 import pandas as pd
 from huggingface_hub import InferenceClient
 
-st.set_page_config(page_title="Zomato AI Bot", layout="wide")
+# -------------------------
+# PAGE CONFIG
+# -------------------------
+st.set_page_config(page_title="Zomato AI Analytics Assistant")
 
-st.title("🤖 Zomato AI Analytics Assistant")
-st.write("Ask anything about the dataset like ChatGPT.")
+st.title("Zomato AI Analytics Assistant")
+st.write("Ask anything about the dataset. The AI will analyze and answer.")
 
-# Load dataset
-df = pd.read_csv("Zomato Dataset.csv")
+# -------------------------
+# LOAD DATASET
+# -------------------------
+try:
+    df = pd.read_csv("Zomato.csv")   # Make sure file name matches exactly
+    st.success("Dataset Loaded Successfully!")
+except Exception as e:
+    st.error(f"Error loading dataset: {e}")
+    st.stop()
 
-# Show dataset loaded
-st.success("Dataset Loaded Successfully!")
+# -------------------------
+# LOAD HUGGING FACE MODEL
+# -------------------------
+HF_TOKEN = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
 
-# Create Hugging Face client
 client = InferenceClient(
     model="mistralai/Mistral-7B-Instruct-v0.2",
-    token=st.secrets["HUGGINGFACEHUB_API_TOKEN"]
+    token=HF_TOKEN,
 )
 
-# Chat history memory
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# -------------------------
+# USER INPUT
+# -------------------------
+question = st.text_input("Ask your question:")
 
-# Display previous messages
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+if question:
 
-# Chat input
-user_input = st.chat_input("Ask your question here...")
+    # Create dataset context
+    dataset_preview = df.head(20).to_string()
 
-if user_input:
-    # Store user message
-    st.session_state.messages.append({"role": "user", "content": user_input})
-
-    with st.chat_message("user"):
-        st.markdown(user_input)
-
-    # Create intelligent prompt
     prompt = f"""
-You are a professional data analyst.
+You are a data analytics assistant.
 
-Here are the dataset columns:
-{list(df.columns)}
+Here is a preview of the dataset:
 
-Here are first 5 rows:
-{df.head().to_string()}
+{dataset_preview}
 
-User question:
-{user_input}
+Answer this question clearly and professionally:
 
-Answer clearly in simple English.
-If calculation is required, explain logically.
+{question}
 """
 
-    response = client.chat_completion(
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=500,
-        temperature=0.3
-    )
+    try:
+        response = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=500,
+        )
 
-    bot_reply = response.choices[0].message.content
+        answer = response.choices[0].message.content
 
-    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+        st.markdown("### Answer:")
+        st.write(answer)
 
-    with st.chat_message("assistant"):
-        st.markdown(bot_reply)
+    except Exception as e:
+        st.error(f"Error generating response: {e}")

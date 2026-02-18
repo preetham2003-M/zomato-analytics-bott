@@ -1,52 +1,69 @@
 import streamlit as st
 import pandas as pd
-import openai
-import os
+from huggingface_hub import InferenceClient
 
-st.set_page_config(page_title="Zomato AI Analytics Bot", layout="wide")
+st.set_page_config(page_title="Zomato AI Bot", layout="wide")
 
-st.title("🤖 Zomato AI Analytics Bot")
-st.markdown("Ask anything about the dataset. AI will analyze it.")
+st.title("🤖 Zomato AI Analytics Assistant")
+st.write("Ask anything about the dataset like ChatGPT.")
 
-# ---- SET YOUR OPENAI API KEY ----
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Load dataset
+df = pd.read_csv("Zomato Dataset.csv")
 
-# ---- LOAD DATA ----
-try:
-    df = pd.read_csv("Zomato.csv")
-    st.success("Dataset Loaded Successfully!")
-except:
-    st.error("Dataset file not found.")
-    st.stop()
+# Show dataset loaded
+st.success("Dataset Loaded Successfully!")
 
-question = st.text_input("Ask your question:")
+# Create Hugging Face client
+client = InferenceClient(
+    model="mistralai/Mistral-7B-Instruct-v0.2",
+    token=st.secrets["HUGGINGFACEHUB_API_TOKEN"]
+)
 
-if question:
-    
+# Chat history memory
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display previous messages
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# Chat input
+user_input = st.chat_input("Ask your question here...")
+
+if user_input:
+    # Store user message
+    st.session_state.messages.append({"role": "user", "content": user_input})
+
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
+    # Create intelligent prompt
     prompt = f"""
-    You are a data analyst.
-    The dataframe is called df.
-    The columns are: {list(df.columns)}.
-    
-    Write ONLY python pandas code to answer this question:
-    {question}
-    
-    Return only code, no explanation.
-    """
+You are a professional data analyst.
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
+Here are the dataset columns:
+{list(df.columns)}
+
+Here are first 5 rows:
+{df.head().to_string()}
+
+User question:
+{user_input}
+
+Answer clearly in simple English.
+If calculation is required, explain logically.
+"""
+
+    response = client.chat_completion(
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500,
+        temperature=0.3
     )
 
-    code = response.choices[0].message["content"]
+    bot_reply = response.choices[0].message.content
 
-    st.code(code)
+    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
 
-    try:
-        result = eval(code)
-        st.write("### Result:")
-        st.write(result)
-    except Exception as e:
-        st.error("Error executing AI generated code")
-        st.write(e)
+    with st.chat_message("assistant"):
+        st.markdown(bot_reply)

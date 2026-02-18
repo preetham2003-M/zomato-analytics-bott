@@ -1,84 +1,52 @@
 import streamlit as st
 import pandas as pd
+import openai
+import os
 
-st.set_page_config(page_title="Zomato Analytics Bot", layout="wide")
+st.set_page_config(page_title="Zomato AI Analytics Bot", layout="wide")
 
-st.title("🍽️ Zomato Delivery Analytics Bot")
-st.markdown("Ask intelligent questions about the dataset.")
+st.title("🤖 Zomato AI Analytics Bot")
+st.markdown("Ask anything about the dataset. AI will analyze it.")
 
-# Load Dataset
+# ---- SET YOUR OPENAI API KEY ----
+openai.api_key = st.secrets["OPENAI_API_KEY"]
+
+# ---- LOAD DATA ----
 try:
     df = pd.read_csv("Zomato.csv")
     st.success("Dataset Loaded Successfully!")
 except:
-    st.error("Dataset not found. Please check file name.")
+    st.error("Dataset file not found.")
     st.stop()
 
-query = st.text_input("Ask a question about the dataset:")
+question = st.text_input("Ask your question:")
 
-if query:
-    q = query.lower()
+if question:
+    
+    prompt = f"""
+    You are a data analyst.
+    The dataframe is called df.
+    The columns are: {list(df.columns)}.
+    
+    Write ONLY python pandas code to answer this question:
+    {question}
+    
+    Return only code, no explanation.
+    """
 
-    # ---------------- BASIC INFO ----------------
-    if "top" in q or "first" in q:
-        st.subheader("Top 5 Rows")
-        st.dataframe(df.head())
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
 
-    elif "columns" in q:
-        st.subheader("Column Names")
-        st.dataframe(pd.DataFrame(df.columns, columns=["Columns"]))
+    code = response.choices[0].message["content"]
 
-    elif "shape" in q:
-        st.subheader("Dataset Shape")
-        st.write("Rows:", df.shape[0])
-        st.write("Columns:", df.shape[1])
+    st.code(code)
 
-    elif "describe" in q or "summary" in q:
-        st.subheader("Statistical Summary")
-        st.dataframe(df.describe())
-
-    # ---------------- NUMERIC ANALYSIS ----------------
-    elif "lowest" in q:
-        numeric_cols = df.select_dtypes(include='number').columns
-        if len(numeric_cols) > 0:
-            col = numeric_cols[0]
-            st.write(f"Lowest value in {col}:", df[col].min())
-        else:
-            st.write("No numeric columns found.")
-
-    elif "highest" in q:
-        numeric_cols = df.select_dtypes(include='number').columns
-        if len(numeric_cols) > 0:
-            col = numeric_cols[0]
-            st.write(f"Highest value in {col}:", df[col].max())
-        else:
-            st.write("No numeric columns found.")
-
-    elif "average" in q or "mean" in q:
-        numeric_cols = df.select_dtypes(include='number').columns
-        if len(numeric_cols) > 0:
-            col = numeric_cols[0]
-            st.write(f"Average value of {col}:", round(df[col].mean(),2))
-        else:
-            st.write("No numeric columns found.")
-
-    # ---------------- SPECIFIC COLUMN INTELLIGENCE ----------------
-    elif "rating" in q:
-        if "Delivery_person_Ratings" in df.columns:
-            st.write("Average Rating:", round(df["Delivery_person_Ratings"].mean(),2))
-            st.write("Highest Rating:", df["Delivery_person_Ratings"].max())
-            st.write("Lowest Rating:", df["Delivery_person_Ratings"].min())
-        else:
-            st.write("Rating column not found.")
-
-    elif "age" in q:
-        if "Delivery_person_Age" in df.columns:
-            st.write("Average Age:", round(df["Delivery_person_Age"].mean(),2))
-            st.write("Minimum Age:", df["Delivery_person_Age"].min())
-            st.write("Maximum Age:", df["Delivery_person_Age"].max())
-        else:
-            st.write("Age column not found.")
-
-    # ---------------- DEFAULT ----------------
-    else:
-        st.warning("I cannot answer that question yet. Try asking about top rows, columns, shape, rating, age, average, lowest, highest etc.")
+    try:
+        result = eval(code)
+        st.write("### Result:")
+        st.write(result)
+    except Exception as e:
+        st.error("Error executing AI generated code")
+        st.write(e)
